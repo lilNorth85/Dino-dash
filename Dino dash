@@ -1,0 +1,717 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DINO DASH</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at top, #26334b, #101521 65%);
+  color: white;
+  font-family: Arial, sans-serif;
+}
+.game-wrap { width: min(920px, 94vw); }
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+h1 { margin: 0; letter-spacing: 4px; }
+h1 span { color: #72e6b1; }
+.stats {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-weight: bold;
+  color: #c7d2e7;
+}
+.stats b { color: white; }
+.panel {
+  position: relative;
+  border: 1px solid #43516a;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px #0008;
+  background: #c9edfa;
+}
+canvas {
+  width: 100%;
+  display: block;
+  touch-action: manipulation;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 20px;
+  background: #101827b8;
+  overflow-y: auto;
+}
+.overlay.hidden { display: none; }
+.overlay h2 {
+  font-size: clamp(28px, 6vw, 48px);
+  margin: 0 0 8px;
+  letter-spacing: 3px;
+}
+.overlay p { color: #dce7f8; margin: 0 0 18px; }
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 23px;
+  background: #72e6b1;
+  color: #10231d;
+  font-weight: 900;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #319b70;
+}
+button:active { transform: translateY(2px); }
+button.secondary {
+  background: #dce7f8;
+  box-shadow: 0 4px 0 #8797ad;
+}
+button:disabled { opacity: .45; cursor: not-allowed; }
+.actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hint {
+  text-align: center;
+  color: #aebbd0;
+  font-size: 13px;
+  margin-top: 13px;
+}
+.mobile-controls {
+  display: none;
+  justify-content: center;
+  margin-top: 14px;
+}
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  gap: 10px;
+  width: min(570px, 100%);
+  margin: 12px 0 18px;
+}
+.skin-card {
+  background: #26364b;
+  border: 1px solid #64748b;
+  border-radius: 12px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.skin-preview {
+  width: 54px;
+  height: 40px;
+  border-radius: 12px 12px 8px 8px;
+  border-bottom: 7px solid #172334;
+  position: relative;
+}
+.skin-preview:after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  background: white;
+  border-radius: 50%;
+}
+.skin-name { font-weight: 900; font-size: 13px; }
+.skin-price { font-size: 12px; color: #cbd5e1; }
+.shop-grid button { padding: 8px 10px; font-size: 11px; }
+
+@media(max-width:650px) {
+  .mobile-controls { display: flex; }
+  .hint { font-size: 12px; }
+  .shop-grid { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
+  .stats { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<main class="game-wrap">
+  <div class="top">
+    <h1>DINO <span>DASH</span></h1>
+    <div class="stats">
+      <div>SCORE <b id="score">00000</b></div>
+      <div>BEST <b id="best">00000</b></div>
+      <div>COINS <b id="coins">0</b> 🪙</div>
+      <button class="secondary" id="shopBtn">SHOP</button>
+    </div>
+  </div>
+
+  <section class="panel">
+    <canvas id="game" width="900" height="330"></canvas>
+
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">READY TO RUN?</h2>
+      <p id="overlayText">
+        Jump over obstacles, collect coins and beat your best score!
+      </p>
+      <div class="actions">
+        <button id="startBtn">START GAME</button>
+        <button class="secondary" id="homeShopBtn">DINO SHOP</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="shopOverlay">
+      <h2>DINO SHOP</h2>
+      <p>Earn coins while you run. Buy a skin and equip it!</p>
+      <div class="shop-grid" id="shopGrid"></div>
+      <div class="actions">
+        <button class="secondary" id="closeShopBtn">BACK</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="mobile-controls">
+    <button id="jumpBtn">JUMP</button>
+  </div>
+
+  <p class="hint">
+    SPACE / ↑ / TAP TO JUMP • Earn 1 coin every 10 points • Day/night changes every 1,000 points!
+  </p>
+</main>
+
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+
+  const scoreEl = document.getElementById("score");
+  const bestEl = document.getElementById("best");
+  const coinsEl = document.getElementById("coins");
+
+  const overlay = document.getElementById("overlay");
+  const shopOverlay = document.getElementById("shopOverlay");
+
+  const title = document.getElementById("overlayTitle");
+  const message = document.getElementById("overlayText");
+
+  const startBtn = document.getElementById("startBtn");
+  const jumpBtn = document.getElementById("jumpBtn");
+
+  const shopBtn = document.getElementById("shopBtn");
+  const homeShopBtn = document.getElementById("homeShopBtn");
+  const closeShopBtn = document.getElementById("closeShopBtn");
+
+  const shopGrid = document.getElementById("shopGrid");
+  const groundY = 265;
+
+  // DINOSAUR SKINS
+  const skins = [
+    { id: "classic", name: "Classic", color: "#26364b", price: 0 },
+    { id: "mint", name: "Mint", color: "#35b889", price: 30 },
+    { id: "fire", name: "Flame", color: "#f06438", price: 75 },
+    { id: "ocean", name: "Ocean", color: "#3185df", price: 125 },
+    { id: "gold", name: "Golden", color: "#e8b82e", price: 200 },
+    { id: "purple", name: "Galaxy", color: "#9258d6", price: 300 }
+  ];
+
+  // GAME DATA
+  let state = "ready";
+  let score = 0;
+
+  let best = Number(localStorage.getItem("dinoDashBest") || 0);
+  let coins = Number(localStorage.getItem("dinoDashCoins") || 0);
+
+  let owned = JSON.parse(
+    localStorage.getItem("dinoDashOwned") || '["classic"]'
+  );
+
+  let selectedSkin = localStorage.getItem("dinoDashSkin") || "classic";
+
+  if (!owned.includes("classic")) owned.push("classic");
+  if (!owned.includes(selectedSkin)) selectedSkin = "classic";
+
+  let speed = 9.5;
+  let frame = 0;
+  let groundOffset = 0;
+  let obstacles = [];
+  let clouds = [];
+  let lastCoinMilestone = 0;
+
+  // PLAYER
+  const dino = {
+    x: 105,
+    y: groundY - 48,
+    w: 46,
+    h: 48,
+    vy: 0,
+    grounded: true
+  };
+
+  // SAVE PROGRESS
+  function saveProgress() {
+    localStorage.setItem("dinoDashCoins", String(coins));
+    localStorage.setItem("dinoDashOwned", JSON.stringify(owned));
+    localStorage.setItem("dinoDashSkin", selectedSkin);
+    localStorage.setItem("dinoDashBest", String(best));
+  }
+
+  // UPDATE HUD
+  function updateHUD() {
+    bestEl.textContent = String(best).padStart(5, "0");
+    coinsEl.textContent = String(coins);
+  }
+
+  // RESET
+  function reset() {
+    score = 0;
+    speed = 9.5;
+    frame = 0;
+    groundOffset = 0;
+    obstacles = [];
+    lastCoinMilestone = 0;
+
+    clouds = [
+      {x:180,y:65,s:1},
+      {x:510,y:105,s:0.8},
+      {x:790,y:55,s:1.1}
+    ];
+
+    dino.y = groundY - dino.h;
+    dino.vy = 0;
+    dino.grounded = true;
+
+    scoreEl.textContent = "00000";
+  }
+
+  // START
+  function start() {
+    reset();
+    state = "running";
+    overlay.classList.add("hidden");
+    shopOverlay.classList.add("hidden");
+  }
+
+  // JUMP
+  function jump() {
+    if (state === "ready" || state === "over") {
+      start();
+      return;
+    }
+
+    if (state === "running" && dino.grounded) {
+      dino.vy = -14.5;
+      dino.grounded = false;
+    }
+  }
+
+  // GAME OVER
+  function endGame() {
+    state = "over";
+
+    const finalScore = Math.floor(score);
+    if (finalScore > best) best = finalScore;
+
+    saveProgress();
+    updateHUD();
+
+    title.textContent = "GAME OVER";
+    message.textContent =
+      `You scored ${finalScore}. Keep running to earn coins!`;
+
+    startBtn.textContent = "PLAY AGAIN";
+    overlay.classList.remove("hidden");
+  }
+
+  // SHOP
+  function openShop() {
+    if (state === "running") return;
+
+    renderShop();
+    overlay.classList.add("hidden");
+    shopOverlay.classList.remove("hidden");
+  }
+
+  function closeShop() {
+    shopOverlay.classList.add("hidden");
+
+    if (state === "ready" || state === "over") {
+      overlay.classList.remove("hidden");
+    }
+  }
+
+  // DISPLAY SKINS
+  function renderShop() {
+    shopGrid.innerHTML = "";
+
+    skins.forEach(skin => {
+      const isOwned = owned.includes(skin.id);
+      const isSelected = selectedSkin === skin.id;
+
+      const card = document.createElement("div");
+      card.className = "skin-card";
+
+      const preview = document.createElement("div");
+      preview.className = "skin-preview";
+      preview.style.background = skin.color;
+
+      const name = document.createElement("div");
+      name.className = "skin-name";
+      name.textContent = skin.name;
+
+      const price = document.createElement("div");
+      price.className = "skin-price";
+      price.textContent =
+        skin.price === 0 ? "FREE" : `${skin.price} coins`;
+
+      const button = document.createElement("button");
+      button.textContent =
+        isSelected ? "EQUIPPED" :
+        isOwned ? "EQUIP" :
+        "BUY";
+
+      button.disabled = isSelected || (!isOwned && coins < skin.price);
+
+      button.addEventListener("click", () => {
+        if (owned.includes(skin.id)) {
+          selectedSkin = skin.id;
+        } else if (coins >= skin.price) {
+          coins -= skin.price;
+          owned.push(skin.id);
+          selectedSkin = skin.id;
+        }
+
+        saveProgress();
+        updateHUD();
+        renderShop();
+      });
+
+      card.append(preview, name, price, button);
+      shopGrid.appendChild(card);
+    });
+  }
+
+  // ROUNDED RECTANGLE
+  function roundedRect(x,y,w,h,r,color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x,y,w,h,r);
+    ctx.fill();
+  }
+
+  // DRAW DINO
+  function drawDino() {
+    const x = dino.x;
+    const y = dino.y;
+
+    const skin =
+      skins.find(s => s.id === selectedSkin) || skins[0];
+
+    const color = skin.color;
+
+    roundedRect(x+5,y+17,31,29,7,color);
+    roundedRect(x+20,y,27,25,6,color);
+
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x+38,y+7,4,4);
+
+    ctx.fillStyle = "#172334";
+    ctx.fillRect(x+44,y+15,5,4);
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x+5,y+25);
+    ctx.lineTo(x-5,y+19);
+    ctx.lineTo(x+1,y+32);
+    ctx.fill();
+
+    if (
+      dino.grounded &&
+      state === "running" &&
+      Math.floor(frame/6)%2 === 0
+    ) {
+      ctx.fillRect(x+11,y+42,7,9);
+      ctx.fillRect(x+28,y+42,7,5);
+    } else {
+      ctx.fillRect(x+11,y+42,7,6);
+      ctx.fillRect(x+28,y+42,7,9);
+    }
+  }
+
+  // DRAW CACTUS
+  function drawCactus(o) {
+    const x = o.x;
+    const y = groundY - o.h;
+
+    roundedRect(x+9,y,13,o.h,4,"#258b69");
+    roundedRect(x,y+o.h*.42,12,8,4,"#258b69");
+    roundedRect(x,y+o.h*.28,7,o.h*.22,3,"#258b69");
+    roundedRect(x+19,y+o.h*.58,12,8,4,"#258b69");
+    roundedRect(x+24,y+o.h*.40,7,o.h*.22,3,"#258b69");
+  }
+
+  // CLOUDS
+  function drawCloud(c) {
+    ctx.fillStyle = "#ffffffb8";
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,15*c.s,0,Math.PI*2);
+    ctx.arc(c.x+17*c.s,c.y-7*c.s,19*c.s,0,Math.PI*2);
+    ctx.arc(c.x+37*c.s,c.y,13*c.s,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // DAY / NIGHT CYCLE
+  // 0-999 = day
+  // 1,000-1,999 = night
+  // 2,000-2,999 = day
+  // 3,000-3,999 = night, and so on.
+  function isNightTime() {
+    return Math.floor(score / 1000) % 2 === 1;
+  }
+
+  // DRAW GAME
+  function draw() {
+    const night = isNightTime();
+
+    // SKY
+    const sky = ctx.createLinearGradient(0,0,0,330);
+
+    if (night) {
+      sky.addColorStop(0,"#101a3d");
+      sky.addColorStop(1,"#283b63");
+    } else {
+      sky.addColorStop(0,"#a9e3f4");
+      sky.addColorStop(1,"#e8f8fa");
+    }
+
+    ctx.fillStyle = sky;
+    ctx.fillRect(0,0,900,330);
+
+    // STARS AT NIGHT
+    if (night) {
+      ctx.fillStyle = "#ffffff";
+
+      for (let i = 0; i < 65; i++) {
+        const x = (i * 137 + 31) % 900;
+        const y = (i * 53 + 17) % 175;
+        const size = i % 5 === 0 ? 2 : 1;
+
+        ctx.globalAlpha = 0.55 + (i % 4) * 0.12;
+        ctx.fillRect(x,y,size,size);
+      }
+
+      ctx.globalAlpha = 1;
+    }
+
+    // HILLS
+    ctx.fillStyle = night ? "#263c54" : "#b6e3d5";
+
+    ctx.beginPath();
+    ctx.moveTo(0,230);
+    ctx.quadraticCurveTo(160,155,330,230);
+    ctx.quadraticCurveTo(500,165,680,230);
+    ctx.quadraticCurveTo(800,180,900,220);
+    ctx.lineTo(900,270);
+    ctx.lineTo(0,270);
+    ctx.fill();
+
+    // CLOUDS
+    clouds.forEach(c => {
+      if (night) {
+        ctx.fillStyle = "#9aaac7b8";
+        ctx.beginPath();
+        ctx.arc(c.x,c.y,15*c.s,0,Math.PI*2);
+        ctx.arc(c.x+17*c.s,c.y-7*c.s,19*c.s,0,Math.PI*2);
+        ctx.arc(c.x+37*c.s,c.y,13*c.s,0,Math.PI*2);
+        ctx.fill();
+      } else {
+        drawCloud(c);
+      }
+    });
+
+    // GROUND
+    ctx.fillStyle = night ? "#293d48" : "#557b72";
+    ctx.fillRect(0,groundY,900,3);
+
+    ctx.strokeStyle = night ? "#607887" : "#8aa99e";
+    ctx.lineWidth = 2;
+
+    for (
+      let x = -(groundOffset % 38);
+      x < 900;
+      x += 38
+    ) {
+      ctx.beginPath();
+      ctx.moveTo(x,groundY+15);
+      ctx.lineTo(x+13,groundY+15);
+      ctx.stroke();
+    }
+
+    // OBSTACLES
+    obstacles.forEach(drawCactus);
+
+    // PLAYER
+    drawDino();
+
+    // SUN BY DAY, MOON BY NIGHT
+    if (night) {
+      ctx.fillStyle = "#f4f0c8";
+      ctx.beginPath();
+      ctx.arc(805,58,23,0,Math.PI*2);
+      ctx.fill();
+
+      // Crescent shadow
+      ctx.fillStyle = "#17264a";
+      ctx.beginPath();
+      ctx.arc(817,49,21,0,Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#fff0a8";
+      ctx.beginPath();
+      ctx.arc(805,58,23,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    // DAY / NIGHT LABEL
+    ctx.fillStyle = night ? "#f0f3ff" : "#385b67";
+    ctx.font = "bold 14px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(night ? "NIGHT 🌙" : "DAY ☀",18,28);
+  }
+
+  // UPDATE GAME
+  function update() {
+    if (state !== "running") return;
+
+    frame++;
+    score += 0.12;
+
+    // KEEP STARTING SPEED AT 9.5
+    speed = 9.5;
+
+    scoreEl.textContent =
+      String(Math.floor(score)).padStart(5,"0");
+
+    // EARN 1 COIN EVERY 10 POINTS
+    const milestone = Math.floor(score / 10);
+
+    if (milestone > lastCoinMilestone) {
+      coins += milestone - lastCoinMilestone;
+      lastCoinMilestone = milestone;
+      saveProgress();
+      updateHUD();
+    }
+
+    // MOVE GROUND
+    groundOffset += speed;
+
+    // GRAVITY
+    dino.vy += 0.72;
+    dino.y += dino.vy;
+
+    if (dino.y >= groundY-dino.h) {
+      dino.y = groundY-dino.h;
+      dino.vy = 0;
+      dino.grounded = true;
+    }
+
+    // MOVE CLOUDS
+    clouds.forEach(c => {
+      c.x -= speed*0.25;
+
+      if(c.x < -60) {
+        c.x = 950;
+      }
+    });
+
+    // SPAWN OBSTACLES
+    if (frame % 105 === 0) {
+      const h = 30 + Math.random()*20;
+
+      obstacles.push({
+        x: 930,
+        h: h,
+        w: 32
+      });
+    }
+
+    // MOVE OBSTACLES
+    obstacles.forEach(o => {
+      o.x -= speed;
+    });
+
+    obstacles = obstacles.filter(o => o.x > -50);
+
+    // COLLISION
+    const hit = obstacles.some(o =>
+      dino.x+38 > o.x+3 &&
+      dino.x+7 < o.x+29 &&
+      dino.y+dino.h-5 > groundY-o.h+5
+    );
+
+    if (hit) {
+      endGame();
+    }
+  }
+
+  // GAME LOOP
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // BUTTON CONTROLS
+  startBtn.addEventListener("click",start);
+  jumpBtn.addEventListener("click",jump);
+  canvas.addEventListener("pointerdown",jump);
+  shopBtn.addEventListener("click",openShop);
+  homeShopBtn.addEventListener("click",openShop);
+  closeShopBtn.addEventListener("click",closeShop);
+
+  // KEYBOARD CONTROLS
+  document.addEventListener("keydown",e => {
+    if (
+      e.code === "Space" ||
+      e.code === "ArrowUp" ||
+      e.code === "KeyW"
+    ) {
+      e.preventDefault();
+
+      if (!shopOverlay.classList.contains("hidden")) return;
+
+      jump();
+    }
+
+    if (
+      e.code === "Escape" &&
+      !shopOverlay.classList.contains("hidden")
+    ) {
+      closeShop();
+    }
+  });
+
+  // INITIALIZE
+  updateHUD();
+  reset();
+  draw();
+  loop();
+
+})();
+</script>
+</body>
+</html>
